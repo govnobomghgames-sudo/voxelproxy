@@ -1,4 +1,4 @@
-pub mod p767 {
+pub mod p769 {
     use minecraft_protocol::{varint::VarInt, Packet};
 
     pub mod c2s {
@@ -25,42 +25,46 @@ pub mod p767 {
         #[packet(0x00)]
         pub struct LoginStart {
             pub name: String,
+            pub uuid: u128,
         }
 
         #[derive(Packet, Debug)]
-        #[packet(0x14)]
+        #[packet(0x03)]
+        pub struct LoginAcknowledged {}
+
+        // ----------- PLAY -----------
+        #[derive(Packet, Debug)]
+        #[packet(0x1E)]
         pub struct Look {
             pub yaw: f32,
             pub pitch: f32,
-            pub on_ground: bool,
+            pub flags: u8,
         }
 
         #[derive(Packet, Debug)]
-        #[packet(0x13)]
+        #[packet(0x1D)]
         pub struct PositionLook {
             pub x: f64,
             pub y: f64,
             pub z: f64,
             pub yaw: f32,
             pub pitch: f32,
-            pub on_ground: bool,
+            pub flags: u8,
         }
 
         #[derive(Packet, Debug)]
-        #[packet(0x12)]
+        #[packet(0x1C)]
         pub struct Position {
             pub x: f64,
             pub y: f64,
             pub z: f64,
-            pub on_ground: bool,
+            pub flags: u8,
         }
 
         #[derive(Packet, Debug, Clone)]
-        #[packet(0x07)]
-        pub struct Transaction {
-            pub window_id: i8,
-            pub action: i16,
-            pub accepted: bool,
+        #[packet(0x2B)]
+        pub struct Pong {
+            pub id: i32,
         }
     }
 
@@ -87,24 +91,26 @@ pub mod p767 {
             pub threshold: VarInt,
         }
 
+        // ----------- PLAY -----------
         #[derive(Packet, Debug)]
-        #[packet(0x34)]
+        #[packet(0x42)]
         pub struct Position {
+            pub teleport_id: VarInt,
             pub x: f64,
             pub y: f64,
             pub z: f64,
+            pub dx: f64,
+            pub dy: f64,
+            pub dz: f64,
             pub yaw: f32,
             pub pitch: f32,
-            pub flags: i8,
-            pub teleportid: VarInt,
+            pub flags: i32,
         }
 
         #[derive(Packet, Debug, Clone)]
-        #[packet(0x11)]
-        pub struct Transaction {
-            pub window_id: i8,
-            pub action: i16,
-            pub accepted: bool,
+        #[packet(0x37)]
+        pub struct Ping {
+            pub id: i32,
         }
     }
 }

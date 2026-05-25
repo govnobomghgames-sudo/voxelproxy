@@ -17,7 +17,7 @@ use tokio::{
 use crate::{
     controller::{run_client, run_server, ClientId, Controller},
     local_ip::get_local_ip,
-    packets::p767::{c2s, s2c},
+    packets::p769::{c2s, s2c},
     resolver::resolve_host_port,
     updater::has_update,
 };
@@ -201,8 +201,8 @@ async fn process_status(mut stream: TcpStream, _protocol: i32) -> anyhow::Result
             s2c::StatusResponse {
                 response: json!({
                   "version": {
-                    "name": "1.16.5",
-                    "protocol": 754
+                    "name": "1.21.4",
+                    "protocol": 769
                   },
                   "players": {
                     "max": 20,
@@ -253,11 +253,11 @@ async fn handle_clients(
         return Ok(());
     }
 
-    if cheat_protocol != 754 {
+    if cheat_protocol != 769 {
         error_handler(
             &mut cheat_stream,
             &mut legit_stream,
-            "Для стабильности поддерживается только 1.16.5\nЕсли вы не можете выбрать версию в клиенте, то используйте ViaProxy".to_string(),
+            "Для стабильности поддерживается только 1.21.4\nЕсли вы не можете выбрать версию в клиенте, то используйте ViaProxy".to_string(),
         )
         .await;
         return Ok(());
@@ -333,6 +333,25 @@ async fn handle_clients(
                 packet.write(&mut cheat_stream).await?;
                 packet.write(&mut legit_stream).await?;
                 println!("[+] Login success");
+
+                // 1.20.2+: read LoginAcknowledged from both clients, forward one to server.
+                let _: c2s::LoginAcknowledged = RawPacket::read(&mut cheat_stream)
+                    .await?
+                    .try_uncompress(threshold)?
+                    .unwrap()
+                    .convert()?;
+                let _: c2s::LoginAcknowledged = RawPacket::read(&mut legit_stream)
+                    .await?
+                    .try_uncompress(threshold)?
+                    .unwrap()
+                    .convert()?;
+
+                c2s::LoginAcknowledged {}
+                    .as_uncompressed()?
+                    .compress_to_raw(threshold)?
+                    .write(&mut remote_stream)
+                    .await?;
+                println!("[+] Login acknowledged");
                 break;
             }
             3 => {

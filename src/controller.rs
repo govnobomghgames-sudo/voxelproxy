@@ -8,7 +8,7 @@ use tokio::{
     sync::mpsc::{Receiver, Sender},
 };
 
-use crate::packets::p767::{c2s, s2c};
+use crate::packets::p769::{c2s, s2c};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClientId {
@@ -32,16 +32,16 @@ pub enum Event {
     ServerData(RawPacket),
 }
 
-pub struct TransactionSync {
-    action: i16,
+pub struct PingSync {
+    id: i32,
     cheat_sent: bool,
     legit_sent: bool,
 }
 
-impl TransactionSync {
-    fn new(transaction: &s2c::Transaction) -> Self {
+impl PingSync {
+    fn new(id: i32) -> Self {
         Self {
-            action: transaction.action,
+            id,
             cheat_sent: false,
             legit_sent: false,
         }
@@ -73,7 +73,7 @@ pub struct Controller {
     cheat_active: bool,
     legit_active: bool,
     position: s2c::Position,
-    transactions: Vec<TransactionSync>,
+    pings: Vec<PingSync>,
     m_tx: Sender<UncompressedPacket>,
 }
 
@@ -97,15 +97,18 @@ impl Controller {
             cheat_active: true,
             legit_active: true,
             position: s2c::Position {
+                teleport_id: VarInt(0),
                 x: 0.0,
                 y: 0.0,
                 z: 0.0,
+                dx: 0.0,
+                dy: 0.0,
+                dz: 0.0,
                 yaw: 0.0,
                 pitch: 0.0,
                 flags: 0,
-                teleportid: VarInt(0),
             },
-            transactions: vec![],
+            pings: vec![],
             m_tx,
         }
     }
@@ -146,23 +149,22 @@ impl Controller {
                     }
 
                     if let Ok(Some(packet)) = packet.try_uncompress(self.threshold) {
-                        if packet.packet_id == c2s::Transaction::PACKET_ID {
-                            let t: c2s::Transaction = packet.convert().unwrap();
+                        if packet.packet_id == c2s::Pong::PACKET_ID {
+                            let t: c2s::Pong = packet.convert().unwrap();
 
                             if self.both_active() {
                                 if let Some(index) =
-                                    self.transactions.iter_mut().position(|sync_packet| {
-                                        sync_packet.action == t.action
-                                            && sync_packet.sent(client_id)
+                                    self.pings.iter_mut().position(|sync_packet| {
+                                        sync_packet.id == t.id && sync_packet.sent(client_id)
                                     })
                                 {
-                                    self.transactions.remove(index);
+                                    self.pings.remove(index);
                                 }
                             } else {
-                                if let Some(t) = self.transactions.get(0) {
+                                if let Some(t) = self.pings.get(0) {
                                     if t.is_sent(client_id.opposite()) {
-                                        println!("Синхронизация: Пропуск: {}", t.action);
-                                        self.transactions.remove(0);
+                                        println!("Синхронизация: Пропуск: {}", t.id);
+                                        self.pings.remove(0);
                                         continue;
                                     }
                                 }
@@ -197,26 +199,21 @@ impl Controller {
                         println!("Переключился на {:?}", self.active_client);
 
                         let mut to_send = vec![];
-                        self.transactions.retain(|t| {
+                        self.pings.retain(|t| {
                             if t.is_sent(self.active_client) {
-                                let transaction = c2s::Transaction {
-                                    window_id: 0,
-                                    action: t.action,
-                                    accepted: true,
-                                };
-                                to_send.push(transaction);
+                                let pong = c2s::Pong { id: t.id };
+                                to_send.push(pong);
                                 true
                             } else {
                                 false
                             }
                         });
 
-                        for transaction in to_send {
-                            println!("Синхронизация: Отправка: {}", transaction.action);
+                        for pong in to_send {
+                            println!("Синхронизация: Отправка: {}", pong.id);
                             self.remote_tx
                                 .send(
-                                    transaction
-                                        .as_uncompressed()
+                                    pong.as_uncompressed()
                                         .unwrap()
                                         .compress_to_raw(self.threshold)
                                         .unwrap(),
@@ -228,9 +225,9 @@ impl Controller {
                 }
                 Event::ServerData(packet) => {
                     if let Ok(Some(packet)) = packet.try_uncompress(self.threshold) {
-                        if packet.packet_id == s2c::Transaction::PACKET_ID {
-                            let t: s2c::Transaction = packet.convert().unwrap();
-                            self.transactions.push(TransactionSync::new(&t));
+                        if packet.packet_id == s2c::Ping::PACKET_ID {
+                            let t: s2c::Ping = packet.convert().unwrap();
+                            self.pings.push(PingSync::new(t.id));
                         }
                     }
                     if self.cheat_active {
@@ -371,7 +368,7 @@ pub async fn middleware(mut rx: Receiver<UncompressedPacket>, dns: String, nick:
 }
 
 #[derive(minecraft_protocol::Packet)]
-#[packet(0x03)]
+#[packet(0x07)]
 pub struct Message {
     pub message: String,
 }
