@@ -363,8 +363,11 @@ async fn handle_clients(
                 packet.write(&mut legit_stream).await?;
                 println!("[+] Compression");
             }
-            _ => {
-                unreachable!();
+            other => {
+                println!("[!] Неизвестный login пакет: 0x{:02X}", other);
+                let packet = packet.compress_to_raw(threshold)?;
+                packet.write(&mut cheat_stream).await?;
+                packet.write(&mut legit_stream).await?;
             }
         }
     }
